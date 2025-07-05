@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tower of Hanoi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Press Start 2P', cursive;
+        }
+        .disk {
+            height: 40px;
+            margin: 0 auto 5px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 16px;
+            text-shadow: 1px 1px 2px black;
+        }
+        .peg {
+            width: 20px;
+            background: #8B4513;
+            position: relative;
+            display: flex;
+            flex-direction: column-reverse;
+            align-items: center;
+            margin: 0 20px;
+        }
+        .peg::after {
+            content: '';
+            position: absolute;
+            bottom: -20px;
+            left: -40px;
+            width: 100px;
+            height: 20px;
+            background: #8B4513;
+            z-index: 0;
+        }
+        .selected-source {
+            transform: translateY(-20px);
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.8);
+            z-index: 10;
+            border: 2px solid white;
+        }
+        .valid-target {
+            box-shadow: 0 0 15px rgba(50, 205, 50, 0.8);
+        }
+        .move-animation {
+            animation: moveDisk 1s ease-in-out forwards;
+            z-index: 100;
+        }
+        @keyframes moveDisk {
+            0% { transform: translateY(0) translateX(0); }
+            30% { transform: translateY(-120px) translateX(0); }
+            70% { transform: translateY(-120px) translateX(var(--move-x)); }
+            100% { transform: translateY(0) translateX(var(--move-x)); }
+        }
+        .instruction {
+            position: absolute;
+            top: 120px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 200;
+        }
+        .next-move-hint {
+            position: absolute;
+            bottom: -30px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 12px;
+            color: yellow;
+        }
+    </style>
+</head>
+<body class="bg-green-50 min-h-screen flex flex-col items-center justify-center p-4">
+    <div class="text-center mb-6">
+        <h1 class="text-3xl mb-2 text-green-800">🗼 TOWER OF HANOI 🧠</h1>
+        <div class="mb-4 text-green-700">🎯 Moves: <span id="moves">0</span></div>
+    </div>
+
+    <div class="flex justify-center gap-8 mb-8 relative" style="min-height: 300px;">
+        <!-- Instruction overlay -->
+        <div id="instruction" class="instruction hidden">
+            <div>Click on Peg A to select the top disk</div>
+            <div class="text-sm mt-2">(Or press A/B/C keys to select pegs)</div>
+        </div>
+        
+        <div class="flex flex-col items-center" data-peg="a">
+            <div id="peg-a" class="peg h-64 mb-5"></div>
+            <div class="text-green-700">Peg A</div>
+            <div id="hint-a" class="next-move-hint hidden"></div>
+        </div>
+        <div class="flex flex-col items-center" data-peg="b">
+            <div id="peg-b" class="peg h-64 mb-5"></div>
+            <div class="text-green-700">Peg B</div>
+            <div id="hint-b" class="next-move-hint hidden"></div>
+        </div>
+        <div class="flex flex-col items-center" data-peg="c">
+            <div id="peg-c" class="peg h-64 mb-5"></div>
+            <div class="text-green-700">Peg C</div>
+            <div id="hint-c" class="next-move-hint hidden"></div>
+        </div>
+    </div>
+
+    <div class="flex flex-col items-center gap-4 mb-6">
+        <div class="flex gap-4">
+            <button id="select-a" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition-colors">
+                🅰️ Select Source
+            </button>
+            <button id="select-b" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition-colors">
+                🅱️ Select Target
+            </button>
+            <button id="select-c" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition-colors">
+                🅲️ Select Target
+            </button>
+        </div>
+        <div class="text-sm text-green-700 text-center">
+            ✅ Rule: Only smaller numbered blocks can go on top of larger ones
+        </div>
+    </div>
+
+    <div id="game-over" class="hidden text-green-600 text-xl mb-6 text-center">
+        <div>🎉 Puzzle Solved in <span id="final-moves">0</span> Moves!</div>
+        <div id="min-moves" class="text-sm mt-2"></div>
+    </div>
+
+    <div class="flex gap-4">
+        <button id="reset" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition-colors">
+            RESET GAME
+        </button>
+        <!-- <button id="hint" class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded transition-colors">
+            💡 SHOW NEXT MOVE
+        </button> -->
+    </div>
+
+    <script>
+        const NUM_DISKS = 3;
+        const MIN_MOVES = Math.pow(2, NUM_DISKS) - 1;
+        let pegs = {
+            a: [],
+            b: [],
+            c: []
+        };
+        let selectedPeg = null;
+        let moves = 0;
+        let gameOver = false;
+        let firstMove = true;
+
+        // Disk properties
+        const diskProperties = [
+            { width: '80px', bg: 'bg-red-500', size: 1 },
+            { width: '120px', bg: 'bg-blue-500', size: 2 },
+            { width: '160px', bg: 'bg-green-500', size: 3 }
+        ];
+
+        // Initialize the game
+        function initGame() {
+            pegs = {
+                a: [],
+                b: [],
+                c: []
+            };
+            selectedPeg = null;
+            moves = 0;
+            gameOver = false;
+            firstMove = true;
+            
+            document.getElementById('moves').textContent = '0';
+            document.getElementById('game-over').classList.add('hidden');
+            document.getElementById('instruction').classList.add('hidden');
+            clearHints();
+            
+            // Clear all pegs
+            document.querySelectorAll('.peg').forEach(peg => {
+                peg.innerHTML = '';
+            });
+            
+            // Create disks on peg A (largest first)
+            for (let i = NUM_DISKS - 1; i >= 0; i--) {
+                const disk = document.createElement('div');
+                disk.className = `disk ${diskProperties[i].bg} ${diskProperties[i].width}`;
+                disk.textContent = diskProperties[i].size;
+                disk.dataset.size = diskProperties[i].size;
+                pegs.a.push(disk);
+                document.getElementById('peg-a').appendChild(disk);
+            }
+            
+            updateSelectionUI();
+            
+            // Show first move instruction
+            if (firstMove) {
+                document.getElementById('instruction').classList.remove('hidden');
+                firstMove = false;
+            }
+        }
+        
+        // Clear all hint messages
+        function clearHints() {
+            document.querySelectorAll('.next-move-hint').forEach(hint => {
+                hint.classList.add('hidden');
+                hint.textContent = '';
+            });
+        }
+        
+        // Update the selection buttons UI
+        function updateSelectionUI() {
+            document.getElementById('select-a').textContent = selectedPeg === 'a' ? '🅰️ Selected' : '🅰️ Select Source';
+            document.getElementById('select-b').textContent = selectedPeg === 'b' ? '🅱️ Selected' : '🅱️ Select Target';
+            document.getElementById('select-c').textContent = selectedPeg === 'c' ? '🅲️ Selected' : '🅲️ Select Target';
+            
+            // Highlight selected peg container
+            document.querySelectorAll('[data-peg]').forEach(pegEl => {
+                pegEl.classList.toggle('ring-2', pegEl.dataset.peg === selectedPeg);
+                pegEl.classList.toggle('ring-green-500', pegEl.dataset.peg === selectedPeg);
+            });
+        }
+        
+        // Handle peg selection
+        function selectPeg(pegId) {
+            if (gameOver) return;
+            
+            document.getElementById('instruction').classList.add('hidden');
+            const peg = pegs[pegId];
+            
+            if (selectedPeg === null) {
+                // Select source peg (must have at least one disk)
+                if (peg.length > 0) {
+                    selectedPeg = pegId;
+                    // Highlight top disk
+                    const topDisk = peg[peg.length - 1];
+                    topDisk.classList.add('selected-source');
+                }
+            } else {
+                // If clicking the same peg, deselect it
+                if (selectedPeg === pegId) {
+                    deselectPeg();
+                    return;
+                }
+                
+                // Try to move disk
+                moveDisk(selectedPeg, pegId);
+            }
+            
+            updateSelectionUI();
+        }
+        
+        // Deselect currently selected peg
+        function deselectPeg() {
+            if (selectedPeg) {
+                const peg = pegs[selectedPeg];
+                if (peg.length > 0) {
+                    const topDisk = peg[peg.length - 1];
+                    topDisk.classList.remove('selected-source');
+                }
+                selectedPeg = null;
+                updateSelectionUI();
+            }
+        }
+        
+        // Move disk from source to target peg
+        function moveDisk(sourceId, targetId) {
+            const sourcePeg = pegs[sourceId];
+            const targetPeg = pegs[targetId];
+            
+            if (sourcePeg.length === 0) return;
+            
+            const disk = sourcePeg[sourcePeg.length - 1];
+            
+            // Check if move is valid
+            if (targetPeg.length > 0) {
+                const targetDisk = targetPeg[targetPeg.length - 1];
+                if (parseInt(disk.dataset.size) > parseInt(targetDisk.dataset.size)) {
+                    showInvalidMove();
+                    return;
+                }
+            }
+            
+            // Remove selection highlight
+            disk.classList.remove('selected-source');
+            clearHints();
+            
+            // Calculate animation distance
+            const sourcePegElement = document.getElementById(`peg-${sourceId}`);
+            const targetPegElement = document.getElementById(`peg-${targetId}`);
+            const distance = targetPegElement.offsetLeft - sourcePegElement.offsetLeft;
+            
+            // Set CSS variable for animation
+            disk.style.setProperty('--move-x', `${distance}px`);
+            disk.classList.add('move-animation');
+            
+            // After animation completes
+            setTimeout(() => {
+                // Remove from source peg
+                sourcePeg.pop();
+                // Add to target peg
+                targetPeg.push(disk);
+                targetPegElement.appendChild(disk);
+                
+                // Remove animation classes
+                disk.classList.remove('move-animation');
+                disk.style.removeProperty('--move-x');
+                
+                // Update moves
+                moves++;
+                document.getElementById('moves').textContent = moves;
+                
+                // Check for win condition
+                if (pegs.c.length === NUM_DISKS) {
+                    gameOver = true;
+                    document.getElementById('final-moves').textContent = moves;
+                    const minMovesElement = document.getElementById('min-moves');
+                    minMovesElement.textContent = `Minimum possible moves: ${MIN_MOVES}`;
+                    if (moves === MIN_MOVES) {
+                        minMovesElement.textContent += ' (Perfect!)';
+                    }
+                    document.getElementById('game-over').classList.remove('hidden');
+                }
+                
+                // Reset selection
+                selectedPeg = null;
+                updateSelectionUI();
+            }, 1000);
+        }
+        
+        // Show invalid move feedback
+        function showInvalidMove() {
+            const disk = pegs[selectedPeg][pegs[selectedPeg].length - 1];
+            
+            // Shake animation
+            disk.style.animation = 'shake 0.5s';
+            setTimeout(() => {
+                disk.style.animation = '';
+            }, 500);
+            
+            // Show error message
+            const errorMsg = document.createElement('div');
+            errorMsg.className = 'absolute top-20 left-0 right-0 text-center text-red-600 text-sm animate-bounce';
+            errorMsg.textContent = 'Invalid Move! Only smaller blocks can go on top.';
+            document.body.appendChild(errorMsg);
+            setTimeout(() => {
+                errorMsg.remove();
+            }, 1500);
+            
+            deselectPeg();
+        }
+        
+        // Show hint for next move
+        function showHint() {
+            if (gameOver || selectedPeg) return;
+            
+            clearHints();
+            
+            // Simple AI to find a valid move
+            for (const source of ['a', 'b', 'c']) {
+                if (pegs[source].length === 0) continue;
+                
+                const diskSize = parseInt(pegs[source][pegs[source].length - 1].dataset.size);
+                
+                for (const target of ['a', 'b', 'c']) {
+                    if (source === target) continue;
+                    
+                    if (pegs[target].length === 0 || 
+                        parseInt(pegs[target][pegs[target].length - 1].dataset.size) > diskSize) {
+                        
+                        // Show hint
+                        document.getElementById(`hint-${source}`).textContent = `Move ${diskSize} to Peg ${target.toUpperCase()}`;
+                        document.getElementById(`hint-${source}`).classList.remove('hidden');
+                        document.getElementById(`hint-${target}`).textContent = `Accept ${diskSize} from Peg ${source.toUpperCase()}`;
+                        document.getElementById(`hint-${target}`).classList.remove('hidden');
+                        
+                        // Highlight pegs briefly
+                        const sourcePeg = document.querySelector(`[data-peg="${source}"]`);
+                        const targetPeg = document.querySelector(`[data-peg="${target}"]`);
+                        sourcePeg.classList.add('ring-2', 'ring-yellow-500');
+                        targetPeg.classList.add('ring-2', 'ring-green-500');
+                        
+                        setTimeout(() => {
+                            sourcePeg.classList.remove('ring-2', 'ring-yellow-500');
+                            targetPeg.classList.remove('ring-2', 'ring-green-500');
+                        }, 2000);
+                        
+                        return;
+                    }
+                }
+            }
+        }
+        
+        // Initialize game on load
+        document.addEventListener('DOMContentLoaded', initGame);
+        
+        // Event listeners for peg selection
+        document.querySelector('[data-peg="a"]').addEventListener('click', () => selectPeg('a'));
+        document.querySelector('[data-peg="b"]').addEventListener('click', () => selectPeg('b'));
+        document.querySelector('[data-peg="c"]').addEventListener('click', () => selectPeg('c'));
+        
+        // Button event listeners
+        document.getElementById('select-a').addEventListener('click', () => selectPeg('a'));
+        document.getElementById('select-b').addEventListener('click', () => selectPeg('b'));
+        document.getElementById('select-c').addEventListener('click', () => selectPeg('c'));
+        
+        // Reset button
+        document.getElementById('reset').addEventListener('click', initGame);
+        
+        // Hint button
+        document.getElementById('hint').addEventListener('click', showHint);
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (gameOver) return;
+            
+            if (e.key === 'a' || e.key === 'A') selectPeg('a');
+            if (e.key === 'b' || e.key === 'B') selectPeg('b');
+            if (e.key === 'c' || e.key === 'C') selectPeg('c');
+            if (e.key === 'Escape') deselectPeg();
+            if (e.key === 'h' || e.key === 'H') showHint();
+        });
+    </script>
+</body>
+</html>

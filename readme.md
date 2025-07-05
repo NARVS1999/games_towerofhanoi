@@ -10,7 +10,7 @@ features:
 - Move counter
 
 
-Demo: 
+Demo: https://narvs1999.github.io/games_towerofhanoi/
 
 ![Demo Image](demo-image.png)
 
